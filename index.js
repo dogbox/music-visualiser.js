@@ -69,7 +69,6 @@ var Bar = function(obj) {
     obj.material.emissiveColor = BABYLON.Color3.Lerp(
       colors[color_idx], colors[(color_idx + 1) % colors.length],
       (t - last_update_time) / color_update_interval);
-
   };
 };
 
@@ -106,21 +105,16 @@ function setup_bars(scene, num_bars, radius) {
   return ret;
 }
 
-function create_scene(canvas, engine, music_file) {
+function create_scene(engine) {
   var scene = new BABYLON.Scene(engine);
   scene.clearColor = BABYLON.Color3.Black();
 
   var camera = new BABYLON.ArcRotateCamera(
     'camera', 0, Math.PI / 4, 40, BABYLON.Vector3.Zero(), scene);
   camera.setTarget(BABYLON.Vector3.Zero());
-  camera.attachControl(canvas, false);
 
   var light = new BABYLON.HemisphericLight(
     "light1", new BABYLON.Vector3(0, 1, 0), scene);
-  var music = new BABYLON.Sound(
-    "Music",
-    music_file,
-    scene, null, {autoplay: true});
 
   var bars = setup_bars(scene, 30, 10);
 
@@ -152,13 +146,64 @@ function create_scene(canvas, engine, music_file) {
   return scene;
 }
 
-$(function() {
-  var music_file = 'music/idols.mp3';
+function create_ui(scene, manager) {
+  var canvas = new BABYLON.ScreenSpaceCanvas2D(scene, {
+		id: 'ScreenCanvas', backgroundRoundRadius: 10 });
+
+  var button_text = new BABYLON.Text2D(
+    'Pause', {
+      marginAlignment: 'h: center, v: center',
+      fontName: '20pt Arial',
+    });
+  var button = new BABYLON.Rectangle2D({
+      parent: canvas, id: 'button', x: 60, y: 100, width: 200, height: 80,
+			fill: "#40C040FF", roundRadius: 10,
+			children: [button_text],
+	});
+
+  button.pointerEventObservable.add(function () {
+    if (manager.is_paused) {
+      manager.start();
+      button_text.text = 'Pause';
+    } else {
+      button_text.text = 'Resume';
+      scene.render();  // to render button change
+      manager.pause();
+    }
+  }, BABYLON.PrimitivePointerInfo.PointerUp);
+}
+
+var SceneManager = function() {
+
+  var self = this;
+
   var canvas = $('#renderCanvas')[0];
   var engine = new BABYLON.Engine(canvas, true);
-  var scene = create_scene(canvas, engine, music_file);
+  var scene = create_scene(engine);
+  create_ui(scene, self);
 
-  engine.runRenderLoop(function() {
-    scene.render();
-  });
+  var music_file = 'music/idols.mp3';
+  var music = new BABYLON.Sound(
+    'Music',
+    'music/idols.mp3',
+    scene, null, {autoplay: true});
+
+  self.start = function() {
+    engine.runRenderLoop(function() {
+      scene.render();
+    });
+    music.play();
+    self.is_paused = false;
+  };
+
+  self.pause = function() {
+    music.pause();
+    engine.stopRenderLoop();
+    self.is_paused = true;
+  };
+}
+
+$(function() {
+  var manager = new SceneManager();
+  manager.start();
 });
