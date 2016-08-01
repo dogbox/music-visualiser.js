@@ -3,7 +3,7 @@ var colors = [
   new BABYLON.Color3(0.7, 0.5, 0),
   new BABYLON.Color3(0, 0.7, 0.5),
 ]
-var color_update_interval = 10;
+var color_update_interval = 20;
 
 var Bar = function(obj) {
   var self = this;
@@ -116,7 +116,7 @@ function create_scene(engine) {
 
   var num_bins = analyser.FFT_SIZE / 2;
   var low_offset = 0;
-  var high_offset = 1 / 4.5;
+  var high_offset = 1 / 3;
   var df = Math.trunc((1 - low_offset - high_offset) * num_bins / bars.length);
   for (var i = 0; i < bars.length; i++) {
     bars[i].set_frequencies(
