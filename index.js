@@ -141,8 +141,11 @@ var SongManager = function(manager) {
   var self = this;
   self.song_name_to_file = {
     'Idols': 'idols',
-    'Razor Sharp': 'razor_sharp',
     'LRAD': 'lrad',
+    'Razor Sharp': 'razor_sharp',
+    'Self Destruct': 'self_destruct',
+    'Strangers': 'strangers',
+    'Thunderclap': 'thunderclap',
   };
 
   var songs = [];
