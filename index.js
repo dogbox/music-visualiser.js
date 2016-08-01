@@ -14,16 +14,12 @@ var Bar = function(obj) {
   var last_update_time = 0;
   var color_idx = 0;
 
-  self.get_values = function() {
-    return values;
-  }
-
   function scale_value(value) {
     var mean = 0;
     for (var i in values) {
       mean += values[i];
     }
-    mean += (history_size / 2) * 128;
+    mean += (history_size / 2) * 150;
     mean /= (values.length + history_size / 2);
 
     var std = 0;
@@ -57,7 +53,7 @@ var Bar = function(obj) {
     scaled_value = scale_value(value);
 
     var new_scale = new BABYLON.Vector3(1, Math.max(0.01, 25 * scaled_value), 1);
-    obj.scaling = BABYLON.Vector3.Lerp(obj.scaling, new_scale, .8);
+    obj.scaling = BABYLON.Vector3.Lerp(obj.scaling, new_scale, .6);
     obj.position.y = obj.scaling.y / 2;
 
     var dt = t - last_update_time;
@@ -71,8 +67,6 @@ var Bar = function(obj) {
       (t - last_update_time) / color_update_interval);
   };
 };
-
-var gbar;  // for interactive debugging
 
 function setup_bars(scene, num_bars, radius) {
 
@@ -97,9 +91,6 @@ function setup_bars(scene, num_bars, radius) {
     obj.rotation.y = angle * i;
 
     ret[i] = new Bar(obj);
-    if (i == 10) {
-      gbar = ret[i];
-    }
   }
 
   return ret;
@@ -125,7 +116,7 @@ function create_scene(engine) {
 
   var num_bins = analyser.FFT_SIZE / 2;
   var low_offset = 0;
-  var high_offset = 1 / 6;
+  var high_offset = 1 / 4.5;
   var df = Math.trunc((1 - low_offset - high_offset) * num_bins / bars.length);
   for (var i = 0; i < bars.length; i++) {
     bars[i].set_frequencies(
@@ -146,64 +137,109 @@ function create_scene(engine) {
   return scene;
 }
 
-function create_ui(scene, manager) {
-  var canvas = new BABYLON.ScreenSpaceCanvas2D(scene, {
-		id: 'ScreenCanvas', backgroundRoundRadius: 10 });
+var SongManager = function(manager) {
+  var self = this;
+  self.song_name_to_file = {
+    'Idols': 'idols',
+    'Razor Sharp': 'razor_sharp',
+    'LRAD': 'lrad',
+  };
 
-  var button_text = new BABYLON.Text2D(
-    'Pause', {
-      marginAlignment: 'h: center, v: center',
-      fontName: '20pt Arial',
-    });
-  var button = new BABYLON.Rectangle2D({
-      parent: canvas, id: 'button', x: 60, y: 100, width: 200, height: 80,
-			fill: "#40C040FF", roundRadius: 10,
-			children: [button_text],
-	});
+  var songs = [];
+  for (var i in self.song_name_to_file) {
+    songs.push(self.song_name_to_file[i]);
+  }
 
-  button.pointerEventObservable.add(function () {
-    if (manager.is_paused) {
-      manager.start();
-      button_text.text = 'Pause';
-    } else {
-      button_text.text = 'Resume';
-      scene.render();  // to render button change
-      manager.pause();
-    }
-  }, BABYLON.PrimitivePointerInfo.PointerUp);
-}
+  var song_to_sound = {};
+  for (var i = 0; i < songs.length; i++) {
+    var song = songs[i];
+    var filename = `music/${song}.mp3`
 
-var SceneManager = function() {
+    var sound = new BABYLON.Sound(
+      song, filename, manager.scene, null);
+    sound.autoplay = i == 0;
 
+    var next_song = songs[(i + 1) % songs.length];
+    // next_song needs to have its own scope
+    sound.onended = (function(next_song) {
+      return function() {
+        manager.set_song_from_end(next_song);
+      };
+    })(next_song);
+
+    song_to_sound[song] = sound;
+  }
+
+  var current_sound = song_to_sound[songs[0]];
+  self.play_song = function(song) {
+    current_sound.stop();
+    current_sound = song_to_sound[song];
+    current_sound.play();
+  };
+
+  self.pause = function() {
+    current_sound.pause();
+  };
+
+  self.resume = function() {
+    current_sound.play();
+  };
+
+  self.first_song = songs[0];
+};
+
+var Manager = function() {
   var self = this;
 
   var canvas = $('#renderCanvas')[0];
   var engine = new BABYLON.Engine(canvas, true);
-  var scene = create_scene(engine);
-  create_ui(scene, self);
+  self.scene = create_scene(engine);
 
-  var music_file = 'music/idols.mp3';
-  var music = new BABYLON.Sound(
-    'Music',
-    'music/idols.mp3',
-    scene, null, {autoplay: true});
+  var song_manager = new SongManager(self);
+  var config = {
+    song: song_manager.first_song,
+    paused: false,
+  };
+  var gui = new dat.GUI();
+  gui.add(config, 'song', song_manager.song_name_to_file).onChange(function (v) {
+    self.set_song_from_gui(v);
+  });
+  gui.add(config, 'paused').onChange(function(v) {
+    self.toggle_paused(v);
+  });
 
-  self.start = function() {
-    engine.runRenderLoop(function() {
-      scene.render();
-    });
-    music.play();
-    self.is_paused = false;
+  // start engine on initialization
+  engine.runRenderLoop(function() {
+    self.scene.render();
+  });
+
+  self.toggle_paused = function(paused) {
+    if (paused) {
+      song_manager.pause();
+      engine.stopRenderLoop();
+    } else {
+      engine.runRenderLoop(function() {
+        self.scene.render();
+      });
+      song_manager.resume();
+    }
   };
 
-  self.pause = function() {
-    music.pause();
-    engine.stopRenderLoop();
-    self.is_paused = true;
-  };
-}
+  self.set_song_from_gui = function(song) {
+    song_manager.play_song(song);
+  }
 
+  self.set_song_from_end = function(song) {
+    // manually update the GUI when a song ends
+    config.song = song;
+    for (var i in gui.__controllers) {
+      gui.__controllers[i].updateDisplay();
+    }
+    song_manager.play_song(song);
+  }
+};
+
+var manager;  // global for debugging
 $(function() {
-  var manager = new SceneManager();
-  manager.start();
+  manager = new Manager();
 });
