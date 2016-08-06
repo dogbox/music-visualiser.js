@@ -210,7 +210,7 @@ var SongManager = function(manager) {
 
   self.resume = function() {
     if (current_song !== null) {
-      song_to_state[current_sound].play();
+      song_to_state[current_song].play();
     }
   };
 
