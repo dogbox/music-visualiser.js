@@ -153,39 +153,65 @@ var SongManager = function(manager) {
     songs.push(self.song_name_to_file[i]);
   }
 
-  var song_to_sound = {};
+  var current_song = null;
+  var song_to_state = {};
+
+  function songload_cb(song) {
+    return function() {
+      console.log('loaded', song);
+      song_to_state[song].loaded = true;
+      if (current_song === null) {
+        manager.set_song_from_end(song);
+      }
+    }
+  }
+
   for (var i = 0; i < songs.length; i++) {
     var song = songs[i];
     var filename = `music/${song}.mp3`
-
     var sound = new BABYLON.Sound(
-      song, filename, manager.scene, null);
-    sound.autoplay = i == 0;
+      song, filename, manager.scene, songload_cb(song));
 
     var next_song = songs[(i + 1) % songs.length];
-    // next_song needs to have its own scope
     sound.onended = (function(next_song) {
       return function() {
         manager.set_song_from_end(next_song);
       };
     })(next_song);
 
-    song_to_sound[song] = sound;
+    var state = {
+      sound: sound,
+      loaded: false,
+    }
+    song_to_state[song] = state;
   }
 
-  var current_sound = song_to_sound[songs[0]];
   self.play_song = function(song) {
-    current_sound.stop();
-    current_sound = song_to_sound[song];
-    current_sound.play();
+    if (current_song === song) {
+      return;
+    }
+    var state = song_to_state[song];
+    if (state.loaded) {
+      if (current_song !== null) {
+        song_to_state[current_song].sound.stop();
+      }
+      current_song = song;
+      state.sound.play();
+    } else {
+      console.log(`${song} not loaded yet`);
+    }
   };
 
   self.pause = function() {
-    current_sound.pause();
+    if (current_song !== null) {
+      song_to_state[current_song].sound.pause();
+    }
   };
 
   self.resume = function() {
-    current_sound.play();
+    if (current_song !== null) {
+      song_to_state[current_sound].play();
+    }
   };
 
   self.first_song = songs[0];
